@@ -6,6 +6,9 @@ env/
 # Variáveis de ambiente (contém API keys)
 .env
 
+# Configurações locais do usuário (contém API key)
+config.local.json
+
 # Python
 __pycache__/
 *.py[cod]

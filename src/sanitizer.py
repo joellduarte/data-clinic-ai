@@ -10,6 +10,7 @@ import pandas as pd
 
 from .database import DataManager
 from .llm_client import analyze_schema, generate_cleaning_sql, fix_sql_error
+from .config import get_max_retries
 
 
 @dataclass
@@ -50,7 +51,10 @@ class DataSanitizer:
     Implementa retry logic para SQL inválido.
     """
 
-    MAX_RETRIES = 2  # Número máximo de tentativas de correção
+    @property
+    def max_retries(self) -> int:
+        """Retorna o número máximo de retries das configurações."""
+        return get_max_retries()
 
     def __init__(self, data_manager: DataManager):
         self.dm = data_manager
@@ -90,7 +94,7 @@ class DataSanitizer:
             self._log("analysis", "Iniciando análise de schema com Llama 3.3 70B")
 
             # Pega amostra dos dados
-            sample_df = self.dm.get_sample_rows("raw_data", n=5)
+            sample_df = self.dm.get_sample_rows("raw_data", n=50)
             column_names = list(sample_df.columns)
             sample_str = sample_df.to_string(index=False)
 
@@ -102,6 +106,19 @@ class DataSanitizer:
 
             # Chama o LLM para análise
             result = analyze_schema(sample_str, column_names)
+            analysis_data = result.get("analysis", {})
+
+            # Verifica se o JSON foi parseado corretamente
+            if isinstance(analysis_data, dict) and analysis_data.get("_parse_error"):
+                error_msg = analysis_data.get("error", "Erro ao parsear JSON")
+                logs.append(self._log("error", f"Falha no parse: {error_msg}"))
+                self.last_analysis = AnalysisResult(
+                    success=False,
+                    error=f"O modelo retornou resposta inválida: {error_msg}",
+                    raw_response=result.get("raw_response"),
+                    logs=logs,
+                )
+                return self.last_analysis
 
             logs.append(self._log(
                 "analysis",
@@ -111,7 +128,7 @@ class DataSanitizer:
 
             self.last_analysis = AnalysisResult(
                 success=True,
-                analysis=result.get("analysis"),
+                analysis=analysis_data,
                 raw_response=result.get("raw_response"),
                 logs=logs,
             )
@@ -153,7 +170,7 @@ class DataSanitizer:
                 analysis = self.last_analysis.analysis
 
             # Pega dados para contexto
-            sample_df = self.dm.get_sample_rows("raw_data", n=5)
+            sample_df = self.dm.get_sample_rows("raw_data", n=50)
             column_names = list(sample_df.columns)
             sample_str = sample_df.to_string(index=False)
 
@@ -186,11 +203,11 @@ class DataSanitizer:
 
             # Tenta executar o SQL com retry logic
             last_error = None
-            while retries <= self.MAX_RETRIES:
+            while retries <= self.max_retries:
                 try:
                     logs.append(self._log(
                         "sql_exec",
-                        f"Executando SQL (tentativa {retries + 1}/{self.MAX_RETRIES + 1})"
+                        f"Executando SQL (tentativa {retries + 1}/{self.max_retries + 1})"
                     ))
 
                     # Executa o SQL
@@ -225,11 +242,11 @@ class DataSanitizer:
                         f"Erro ao executar SQL: {last_error[:100]}..."
                     ))
 
-                    if retries < self.MAX_RETRIES:
+                    if retries < self.max_retries:
                         retries += 1
                         logs.append(self._log(
                             "retry",
-                            f"Solicitando correção do SQL (retry {retries}/{self.MAX_RETRIES})"
+                            f"Solicitando correção do SQL (retry {retries}/{self.max_retries})"
                         ))
 
                         # Pede para IA corrigir
@@ -251,7 +268,7 @@ class DataSanitizer:
             # Se chegou aqui, esgotou retries
             logs.append(self._log(
                 "error",
-                f"Falha após {self.MAX_RETRIES + 1} tentativas",
+                f"Falha após {self.max_retries + 1} tentativas",
                 f"Último erro: {last_error}"
             ))
 

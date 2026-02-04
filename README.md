@@ -1,6 +1,6 @@
 # Data Clinic AI
 
-**Autonomous ETL Pipeline with Multi-Model LLM Orchestration**
+**Pipeline de ETL Inteligente com Orquestração Multi-Model de LLMs**
 
 ---
 
@@ -20,12 +20,13 @@ Criei este projeto para acabar com isso. Em vez de eu analisar cada CSV e escrev
 
 ### Arquitetura Multi-Model
 
-Utilizei uma abordagem Multi-Model via OpenRouter para otimizar custos e precisão. Cada modelo faz o que faz de melhor:
+O sistema usa uma abordagem Multi-Model via OpenRouter. Você escolhe o plano e os modelos fazem o trabalho:
 
-| Etapa | Modelo | Função |
-|-------|--------|--------|
-| **Análise de Schema** | Llama 3.3 70B | Lê as primeiras linhas do CSV e identifica o tipo de cada coluna (CPF, Data, Email, etc.) e os problemas encontrados. Rápido e barato para tarefas de classificação. |
-| **Geração de SQL** | DeepSeek R1 | Recebe o diagnóstico e escreve queries SQL de limpeza para SQLite. Escolhi este modelo pela capacidade superior de raciocínio (Chain of Thought) — ele "pensa" antes de escrever o código. |
+| Plano | Modelos | Uso |
+|-------|---------|-----|
+| **Gratuito** | DeepSeek R1T2 Chimera | Análise + SQL. Zero custo, rate limit compartilhado. |
+| **Pago** | GPT-4o-mini | Análise + SQL. Mais rápido, sem rate limit. |
+| **Personalizado** | Qualquer modelo do OpenRouter | Você escolhe. Cole o ID e teste. |
 
 ### Fluxo
 
@@ -33,18 +34,37 @@ Utilizei uma abordagem Multi-Model via OpenRouter para otimizar custos e precis�
 CSV Upload → SQLite (in-memory)
      │
      ▼
-[Llama 3.3] Analisa schema → JSON com tipos e problemas detectados
+[Modelo de Análise] Identifica tipos e problemas → JSON
      │
      ▼
-[DeepSeek R1] Gera SQL de limpeza → CREATE TABLE clean_data + INSERT
+[Modelo de SQL] Gera queries de limpeza → CREATE TABLE + INSERT
      │
      ▼
 Executa SQL → Dados limpos prontos para download
 ```
 
-### Retry Automático
+### Funcionalidades
 
-Se o SQL gerado falhar (sintaxe inválida, coluna inexistente), o sistema captura o erro e pede para o modelo corrigir. Até 2 tentativas automáticas antes de reportar falha.
+- **Retry Automático**: Se o SQL gerado falhar, o sistema pede correção automática (configurável de 0 a 10 tentativas)
+- **Fallback entre modelos**: Se um modelo der rate limit, tenta outro automaticamente
+- **Regras de padronização**: Datas para YYYY-MM-DD, telefones só dígitos, CPFs sem máscara, nomes em maiúsculas
+- **Configurações pela interface**: API Key e preferências salvas localmente
+- **Suporte a encodings**: UTF-8, Latin-1, Windows-1252
+- **Separadores flexíveis**: Vírgula, ponto-e-vírgula, tab, pipe
+
+---
+
+## Configurações Locais (Privacidade)
+
+**Importante**: Suas configurações ficam no seu computador. Nada é enviado para nenhum servidor além da API do OpenRouter.
+
+O arquivo `config.local.json` é criado automaticamente quando você configura a API Key pela interface. Esse arquivo:
+
+- Está no `.gitignore` — **nunca vai para o GitHub**
+- Contém apenas suas preferências locais (API Key, max retries)
+- Fica na raiz do projeto, visível para você
+
+Você pode configurar tudo pela interface (sidebar → Configurações) ou editar o arquivo diretamente se preferir.
 
 ---
 
@@ -72,27 +92,27 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure a API Key
-
-Deixei um `.env.example` como template. Copie e adicione sua chave do OpenRouter:
-
-```bash
-cp .env.example .env
-```
-
-Edite o `.env`:
-```
-OPENROUTER_API_KEY=sk-or-v1-sua-chave-aqui
-```
-
-> Chave gratuita em: https://openrouter.ai/keys
-
-### 5. Execute
+### 4. Execute
 ```bash
 streamlit run app.py
 ```
 
-Acesse `http://localhost:8501`, faça upload de um CSV e teste.
+Acesse `http://localhost:8501`.
+
+### 5. Configure a API Key
+
+Na sidebar, vá em **Configurações** e cole sua API Key do OpenRouter.
+
+> Não tem uma? Crie grátis em: https://openrouter.ai/keys
+
+A chave é salva localmente no `config.local.json` e nunca é enviada para lugar nenhum além do OpenRouter.
+
+**Alternativa**: Se preferir usar variável de ambiente, crie um arquivo `.env`:
+```
+OPENROUTER_API_KEY=sk-or-v1-sua-chave-aqui
+```
+
+### 6. Teste
 
 Há um arquivo de exemplo em `assets/exemplo_dados_sujos.csv` com problemas típicos (datas inconsistentes, CPFs misturados, nomes mal formatados).
 
@@ -104,7 +124,7 @@ Há um arquivo de exemplo em `assets/exemplo_dados_sujos.csv` com problemas típ
 - **Streamlit** — Interface web
 - **SQLite (in-memory)** — Processamento dos dados sem persistência
 - **Pandas** — Manipulação de DataFrames
-- **OpenRouter API** — Orquestração de múltiplos LLMs (Llama, DeepSeek)
+- **OpenRouter API** — Orquestração de múltiplos LLMs
 - **OpenAI SDK** — Cliente HTTP para a API
 
 ---
@@ -113,13 +133,15 @@ Há um arquivo de exemplo em `assets/exemplo_dados_sujos.csv` com problemas típ
 
 ```
 data-clinic-ai/
-├── app.py              # Interface Streamlit
+├── app.py                  # Interface Streamlit
 ├── src/
-│   ├── database.py     # Gerenciamento SQLite
-│   ├── llm_client.py   # Cliente OpenRouter (Llama + DeepSeek)
-│   └── sanitizer.py    # Orquestrador do pipeline + retry logic
+│   ├── config.py           # Gerenciamento de configurações locais
+│   ├── database.py         # Gerenciamento SQLite
+│   ├── llm_client.py       # Cliente OpenRouter + planos de modelos
+│   └── sanitizer.py        # Orquestrador do pipeline + retry logic
 ├── assets/
 │   └── exemplo_dados_sujos.csv
+├── config.local.json       # Suas configurações (criado automaticamente, NÃO vai pro git)
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
@@ -132,4 +154,10 @@ data-clinic-ai/
 **Joel Duarte**
 Engenheiro de Dados | Suporte N3 | Automação de Processos
 
-Este projeto faz parte do meu portfólio técnico. O objetivo foi demonstrar orquestração de múltiplos modelos de IA para resolver um problema real de engenharia de dados — não apenas "chamar uma API", mas arquitetar um pipeline que escolhe o modelo certo para cada tarefa.
+Este projeto faz parte do meu portfólio técnico. O objetivo foi demonstrar orquestração de múltiplos modelos de IA para resolver um problema real de engenharia de dados — não apenas "chamar uma API", mas arquitetar um pipeline que escolhe o modelo certo para cada tarefa, com fallback automático, retry inteligente e configuração flexível.
+
+---
+
+## Licença
+
+MIT — use como quiser.

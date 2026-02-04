@@ -20,12 +20,14 @@ class DataManager:
         self.conn = sqlite3.connect(":memory:", check_same_thread=False)
         self.cursor = self.conn.cursor()
 
-    def load_csv_to_raw(self, file) -> pd.DataFrame:
+    def load_csv_to_raw(self, file, separator: str = ",", encoding: str = "utf-8") -> pd.DataFrame:
         """
         Carrega um arquivo CSV para a tabela 'raw_data' no SQLite.
 
         Args:
             file: Arquivo CSV (pode ser path, file-like object ou UploadedFile do Streamlit)
+            separator: Caractere separador do CSV (vírgula, ponto-e-vírgula, tab, etc.)
+            encoding: Encoding do arquivo (utf-8, latin-1, etc.)
 
         Returns:
             DataFrame com os dados carregados
@@ -38,11 +40,11 @@ class DataManager:
             # File-like object (ex: UploadedFile do Streamlit)
             content = file.read()
             if isinstance(content, bytes):
-                content = content.decode('utf-8')
-            df = pd.read_csv(io.StringIO(content))
+                content = content.decode(encoding)
+            df = pd.read_csv(io.StringIO(content), sep=separator)
         else:
             # Path de arquivo
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, sep=separator, encoding=encoding)
 
         if df.empty:
             raise ValueError("O arquivo CSV está vazio")
