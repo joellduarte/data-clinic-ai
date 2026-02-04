@@ -1,0 +1,39 @@
+# Ambiente virtual
+venv/
+env/
+.venv/
+
+# Variáveis de ambiente (contém API keys)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Streamlit
+.streamlit/
+
+# Dados temporários
+*.db
+*.sqlite
+*.csv
+!assets/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
