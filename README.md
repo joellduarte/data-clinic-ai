@@ -47,7 +47,8 @@ Executa SQL → Dados limpos prontos para download
 
 - **Retry Automático**: Se o SQL gerado falhar, o sistema pede correção automática (configurável de 0 a 10 tentativas)
 - **Fallback entre modelos**: Se um modelo der rate limit, tenta outro automaticamente
-- **Regras de padronização**: Datas para YYYY-MM-DD, telefones só dígitos, CPFs sem máscara, nomes em maiúsculas
+- **Padronização inteligente**: Detecta múltiplos formatos na mesma coluna (ex: datas em DD/MM/YYYY e YYYY-MM-DD juntas) e trata cada um
+- **Nunca perde dados**: Usa COALESCE para manter o valor original se não conseguir converter
 - **Configurações pela interface**: API Key e preferências salvas localmente
 - **Suporte a encodings**: UTF-8, Latin-1, Windows-1252
 - **Separadores flexíveis**: Vírgula, ponto-e-vírgula, tab, pipe

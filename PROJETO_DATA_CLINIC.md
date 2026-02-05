@@ -68,18 +68,31 @@ O sistema utiliza a API do OpenRouter com roteamento dinâmico de modelos:
 
 ---
 
-## 4. Regras de Padronização (Prompt Engineering)
+## 4. Prompt Engineering Inteligente
 
-O prompt de geração de SQL inclui regras explícitas:
+O sistema usa prompts avançados que se adaptam aos dados encontrados:
 
-| Tipo de Dado | Formato de Saída | Transformação |
-|--------------|------------------|---------------|
-| Datas | `YYYY-MM-DD` | Lógica para identificar dia/mês/ano |
-| Telefones | Apenas dígitos | Remove toda formatação |
-| CPF/CNPJ | Apenas dígitos (TEXT) | Remove pontuação, preserva zeros |
+### Análise de Schema (1º Agente)
+- Identifica o **tipo de dado** de cada coluna
+- Lista **todos os formatos encontrados** na amostra (ex: datas em DD/MM/YYYY, DD-MM-YY, YYYY-MM-DD na mesma coluna)
+- Detecta problemas e sugere limpeza
+
+### Geração de SQL (2º Agente)
+- Recebe os formatos encontrados e cria **CASE WHEN para cada variação**
+- Usa **COALESCE** para nunca retornar NULL sem tentar
+- Mantém o valor original se não conseguir converter
+
+### Regras de Padronização
+
+| Tipo de Dado | Formato de Saída | Lógica Inteligente |
+|--------------|------------------|-------------------|
+| Datas | `YYYY-MM-DD` | Detecta múltiplos formatos (BR, US, ISO, ano curto, mês escrito) e trata cada um |
+| Telefones | Apenas dígitos | Identifica código país, DDD, e normaliza qualquer formato |
+| CPF/CNPJ | Apenas dígitos (TEXT) | Remove pontuação, preserva zeros à esquerda |
+| Valores | Números com ponto decimal | Remove R$, converte vírgula para ponto |
 | Emails | Minúsculas | `LOWER(TRIM())` |
 | Nomes | Maiúsculas | `UPPER(TRIM())` |
-| Cidades | Maiúsculas | `UPPER(TRIM())` |
+| Outros | Contextual | Analisa o tipo e aplica limpeza apropriada |
 
 ---
 

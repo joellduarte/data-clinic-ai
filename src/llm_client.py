@@ -195,23 +195,33 @@ def analyze_schema(dataframe_head: str, column_names: list[str]) -> dict:
     Analisa a estrutura do CSV.
     Usa fallback automático se o modelo principal falhar.
     """
-    prompt = f"""Você é um especialista em análise e limpeza de dados. Analise a amostra de dados abaixo e identifique:
-
-1. O tipo de dado provável de cada coluna (ex: CPF, Data, Nome, Email, Telefone, Valor Monetário, etc.)
-2. Problemas de qualidade encontrados (ex: formatos inconsistentes, valores ausentes, duplicatas prováveis)
-3. Sugestões de padronização para cada coluna
+    prompt = f"""Você é um especialista em análise e limpeza de dados. Analise a amostra de dados abaixo.
 
 COLUNAS: {column_names}
 
 AMOSTRA DOS DADOS:
 {dataframe_head}
 
-Responda APENAS com um JSON válido no seguinte formato (sem markdown, sem explicações):
+Para CADA coluna, identifique:
+
+1. **tipo_identificado**: O tipo de dado (Data, Telefone, CPF, CNPJ, Email, Nome, Cidade, Estado, CEP, Valor Monetário, Percentual, Código/ID, Texto Livre, etc.)
+
+2. **formatos_encontrados**: Liste TODOS os formatos diferentes encontrados na amostra.
+   - Para DATAS: liste cada formato (ex: ["DD/MM/YYYY", "DD-MM-YY", "YYYY-MM-DD", "D/M/YYYY", "15/Jan/2020"])
+   - Para TELEFONES: liste variações (ex: ["(11) 99999-9999", "+55 11 99999-9999", "11999999999", "99999-9999"])
+   - Para outros: liste as variações encontradas
+
+3. **problemas**: Problemas de qualidade (formatos inconsistentes, valores ausentes, erros de digitação, letras onde deveria ter números, etc.)
+
+4. **sugestao_limpeza**: Como padronizar considerando TODOS os formatos encontrados
+
+Responda APENAS com JSON válido (sem markdown, sem explicações):
 {{
     "nome_coluna": {{
-        "tipo_identificado": "tipo do dado",
-        "problemas": ["lista de problemas encontrados"],
-        "sugestao_limpeza": "como padronizar/limpar"
+        "tipo_identificado": "tipo",
+        "formatos_encontrados": ["formato1", "formato2"],
+        "problemas": ["problema1", "problema2"],
+        "sugestao_limpeza": "descrição da limpeza"
     }}
 }}
 """
@@ -252,8 +262,12 @@ TAREFA:
 2. Limpar e PADRONIZAR os dados
 3. Inserir na tabela 'clean_data'
 
-ANÁLISE DAS COLUNAS:
+ANÁLISE DAS COLUNAS (use os "formatos_encontrados" para criar CASE WHEN específicos!):
 {analysis_json}
+
+⚠️ IMPORTANTE: A análise acima lista os FORMATOS ENCONTRADOS em cada coluna.
+Use essa informação para criar CASE WHEN que trate CADA formato diferente.
+NÃO assuma um único formato - a mesma coluna pode ter múltiplos formatos!
 
 COLUNAS: {column_names}
 
@@ -261,40 +275,80 @@ AMOSTRA:
 {sample_data}
 
 ═══════════════════════════════════════════════════════════════
-REGRAS DE PADRONIZAÇÃO (OBRIGATÓRIO SEGUIR)
+REGRAS DE PADRONIZAÇÃO INTELIGENTE
 ═══════════════════════════════════════════════════════════════
 
+⚠️ REGRA PRINCIPAL: NUNCA RETORNE NULL SEM TENTAR
+   - Use COALESCE para manter o valor original se não conseguir limpar
+   - Exemplo: COALESCE(valor_limpo, valor_original)
+
 📅 DATAS - Formato de saída: YYYY-MM-DD
-   Para identificar dia/mês/ano, use lógica:
-   - Número > 31 = só pode ser ANO
-   - Número > 12 e <= 31 = só pode ser DIA
-   - Número <= 12 = pode ser DIA ou MÊS (analise o contexto)
-   - 4 dígitos = ANO
-   - 2 dígitos como ano: adicione 1900 se >= 50, senão 2000
-   - Identifique o padrão predominante na amostra antes de converter
+   IMPORTANTE: Analise TODOS os padrões na amostra e crie CASE WHEN para cada um!
 
-   Exemplo de conversão com CASE WHEN e SUBSTR:
-   - Se o dado for "15/03/1990" ou "15-03-1990":
-     SUBSTR(data,-4) || '-' || SUBSTR(data,4,2) || '-' || SUBSTR(data,1,2)
+   Padrões comuns a detectar:
+   - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY (BR/EU)
+   - MM/DD/YYYY (US)
+   - YYYY-MM-DD, YYYY/MM/DD (ISO)
+   - DD/MM/YY, DD-MM-YY (ano curto: >= 50 é 1900, < 50 é 2000)
+   - D/M/YYYY (sem zero à esquerda)
+   - Mês escrito: 15/Jan/2020, 15-Janeiro-2020, Jan 15 2020
 
-📞 TELEFONES - Formato de saída: apenas dígitos (sem formatação)
-   - Remova todos os caracteres não-numéricos: ( ) - + . espaço
-   - Use REPLACE aninhado para limpar
-   - Exemplo: REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(tel, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+   Conversão de mês escrito para número:
+   CASE
+     WHEN UPPER(mes) IN ('JAN', 'JANEIRO', 'JANUARY') THEN '01'
+     WHEN UPPER(mes) IN ('FEV', 'FEVEREIRO', 'FEBRUARY', 'FEB') THEN '02'
+     ... (todos os meses)
+   END
 
-📋 DOCUMENTOS (CPF, CNPJ, etc.) - Formato de saída: apenas dígitos
-   - Remova pontuação: . - /
-   - Mantenha zeros à esquerda (use TEXT, não INTEGER)
+   Lógica para identificar dia/mês/ano:
+   - 4 dígitos consecutivos = ANO
+   - Número > 31 = ANO (ex: 90, 2020)
+   - Número > 12 e <= 31 = DIA (não pode ser mês)
+   - Número <= 12 = pode ser DIA ou MÊS (analise posição e contexto)
 
-📧 EMAILS - Formato de saída: minúsculas, sem espaços
-   - LOWER(TRIM(email))
+   Use CASE WHEN com LENGTH e INSTR para detectar o formato de cada célula!
+   Se não conseguir converter, mantenha o valor original com COALESCE.
 
-👤 NOMES - Formato de saída: MAIÚSCULAS
-   - UPPER(TRIM(nome))
-   - Não tente Title Case (SQLite não suporta)
+📞 TELEFONES - Formato de saída: apenas dígitos, padronizado
+   IMPORTANTE: Analise os padrões na amostra!
 
-🏙️ CIDADES/ESTADOS - Formato de saída: MAIÚSCULAS
-   - UPPER(TRIM(cidade))
+   Passo 1: Remover toda formatação
+   REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(tel, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')
+
+   Passo 2: Analisar o que sobrou (apenas dígitos)
+   - 13 dígitos: código país (55) + DDD (11) + número (9 dígitos) = completo
+   - 12 dígitos: código país (55) + DDD (11) + número (8 dígitos) = completo
+   - 11 dígitos: DDD (11) + número (9 dígitos) = sem código país
+   - 10 dígitos: DDD (11) + número (8 dígitos) = sem código país
+   - 9 dígitos: número celular sem DDD
+   - 8 dígitos: número fixo sem DDD
+
+   Códigos de país comuns: 55 (Brasil), 1 (EUA/Canadá), 351 (Portugal), 54 (Argentina)
+   DDDs Brasil: 11-99 (2 dígitos, começam com 1-9)
+
+   NUNCA retorne NULL - mantenha os dígitos extraídos mesmo se incompleto.
+
+📋 DOCUMENTOS (CPF, CNPJ, RG, etc.) - apenas dígitos como TEXT
+   - Remova: . - / espaços
+   - CPF: 11 dígitos
+   - CNPJ: 14 dígitos
+   - Mantenha zeros à esquerda (TEXT, não INTEGER)
+
+📧 EMAILS - minúsculas, sem espaços
+   LOWER(TRIM(email))
+
+👤 NOMES - MAIÚSCULAS, sem espaços extras
+   UPPER(TRIM(nome))
+
+💰 VALORES MONETÁRIOS - apenas números e ponto decimal
+   - Remova: R$, $, €, espaços, pontos de milhar
+   - Converta vírgula decimal para ponto: REPLACE(valor, ',', '.')
+   - Exemplo: "R$ 1.234,56" → "1234.56"
+
+📊 OUTROS TIPOS DE DADOS
+   - Analise o contexto da coluna na amostra
+   - Aplique limpeza básica: TRIM, remover espaços duplicados
+   - Padronize maiúsculas/minúsculas conforme o contexto
 
 ═══════════════════════════════════════════════════════════════
 LIMITAÇÕES DO SQLITE
@@ -319,29 +373,53 @@ LIMITAÇÕES DO SQLITE
 - Funções de window
 
 ═══════════════════════════════════════════════════════════════
-FORMATO DO SQL
+EXEMPLO DE SQL COM MÚLTIPLOS FORMATOS
 ═══════════════════════════════════════════════════════════════
 
 ```sql
 CREATE TABLE IF NOT EXISTS clean_data (
-    coluna1 TEXT,
-    coluna2 TEXT
+    data_nascimento TEXT,
+    telefone TEXT
 );
 
-INSERT INTO clean_data (coluna1, coluna2)
+INSERT INTO clean_data (data_nascimento, telefone)
 SELECT
-    transformacao1 AS coluna1,
-    transformacao2 AS coluna2
+    -- Data: trata múltiplos formatos com CASE WHEN
+    COALESCE(
+        CASE
+            -- Formato YYYY-MM-DD (já está correto)
+            WHEN LENGTH(data) = 10 AND SUBSTR(data,5,1) = '-' AND SUBSTR(data,8,1) = '-'
+            THEN data
+            -- Formato DD/MM/YYYY
+            WHEN LENGTH(data) = 10 AND SUBSTR(data,3,1) = '/'
+            THEN SUBSTR(data,7,4) || '-' || SUBSTR(data,4,2) || '-' || SUBSTR(data,1,2)
+            -- Formato DD-MM-YYYY
+            WHEN LENGTH(data) = 10 AND SUBSTR(data,3,1) = '-' AND LENGTH(SUBSTR(data,7,4)) = 4
+            THEN SUBSTR(data,7,4) || '-' || SUBSTR(data,4,2) || '-' || SUBSTR(data,1,2)
+            -- Formato DD/MM/YY (ano curto)
+            WHEN LENGTH(data) = 8 AND SUBSTR(data,3,1) = '/'
+            THEN CASE WHEN CAST(SUBSTR(data,7,2) AS INTEGER) >= 50 THEN '19' ELSE '20' END || SUBSTR(data,7,2) || '-' || SUBSTR(data,4,2) || '-' || SUBSTR(data,1,2)
+            ELSE NULL
+        END,
+        data  -- Mantém original se não conseguir converter
+    ) AS data_nascimento,
+
+    -- Telefone: remove formatação e mantém dígitos
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '') AS telefone
 FROM raw_data;
 ```
 
-IMPORTANTE:
-- Analise a AMOSTRA para identificar o padrão REAL dos dados antes de transformar
-- Todas as colunas devem ser TEXT (para preservar zeros à esquerda)
+═══════════════════════════════════════════════════════════════
+REGRAS FINAIS
+═══════════════════════════════════════════════════════════════
+
+- Todas as colunas devem ser TEXT (preserva zeros à esquerda)
+- Use COALESCE para NUNCA perder dados - mantenha original se não converter
+- Crie CASE WHEN para CADA formato encontrado na análise
 - NÃO remova duplicatas
 
 Responda com:
-1. Identificação dos padrões encontrados (1-2 frases por tipo de dado)
+1. Lista dos formatos detectados em cada coluna problemática
 2. SQL entre ```sql e ```
 """
 
