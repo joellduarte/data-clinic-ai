@@ -170,11 +170,14 @@ def _call_llm_with_fallback(
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content.strip(), primary_model
+        content = response.choices[0].message.content
+        if not content or not content.strip():
+            raise Exception(f"Modelo {primary_model} retornou resposta vazia")
+        return content.strip(), primary_model
 
     except Exception as e:
-        # Se for erro de rate/limit e temos fallback, tenta o fallback
-        if _is_rate_or_limit_error(e) and fallback_model:
+        # Se for erro de rate/limit ou resposta vazia e temos fallback, tenta o fallback
+        if fallback_model and (_is_rate_or_limit_error(e) or "resposta vazia" in str(e).lower()):
             try:
                 response = client.chat.completions.create(
                     model=fallback_model,
@@ -182,7 +185,10 @@ def _call_llm_with_fallback(
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
-                return response.choices[0].message.content.strip(), fallback_model
+                content = response.choices[0].message.content
+                if not content or not content.strip():
+                    raise Exception(f"Modelo {fallback_model} também retornou resposta vazia")
+                return content.strip(), fallback_model
             except Exception as e2:
                 # Se fallback também falhar, relança o erro
                 raise Exception(f"Modelo principal ({primary_model}) e fallback ({fallback_model}) falharam. Erro: {str(e2)}")

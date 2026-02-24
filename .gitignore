@@ -32,7 +32,11 @@ dist/
 *.db
 *.sqlite
 *.csv
+*.xlsx
+*.xls
 !assets/*.csv
+!assets/*.xlsx
+!assets/*.db
 
 # OS
 .DS_Store

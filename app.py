@@ -346,8 +346,8 @@ def main():
         # 1. Instruções (primeiro)
         st.header("📋 Instruções")
         st.markdown("""
-        1. **Upload**: Carregue um CSV
-        2. **Configurar**: Separador e encoding
+        1. **Upload**: Carregue CSV, Excel ou SQLite
+        2. **Configurar**: Ajuste as opcoes do arquivo
         3. **Diagnosticar**: IA analisa os dados
         4. **Higienizar**: IA gera SQL de limpeza
         5. **Download**: Baixe o resultado
@@ -454,36 +454,91 @@ def main():
         st.caption("Desenvolvido por Joel Duarte")
 
     # Upload de arquivo
-    st.header("1️⃣ Upload do CSV")
+    st.header("1️⃣ Upload de Dados")
 
     uploaded_file = st.file_uploader(
-        "Arraste ou selecione um arquivo CSV",
-        type=["csv"],
-        help="Carregue um arquivo CSV com dados que precisam de limpeza"
+        "Arraste ou selecione um arquivo",
+        type=["csv", "xlsx", "xls", "db", "sqlite"],
+        help="Carregue um arquivo CSV, Excel (.xlsx, .xls) ou SQLite (.db, .sqlite) com dados que precisam de limpeza"
     )
 
     if uploaded_file is not None:
-        # Opções de configuração do CSV
+        # Detectar tipo de arquivo
+        file_name = uploaded_file.name.lower()
+        is_csv = file_name.endswith(".csv")
+        is_excel = file_name.endswith(".xlsx") or file_name.endswith(".xls")
+        is_sqlite = file_name.endswith(".db") or file_name.endswith(".sqlite")
+
+        # Opções de configuração do arquivo
         st.subheader("Configurações do arquivo")
-        col_sep, col_enc = st.columns(2)
 
-        with col_sep:
-            separator_label = st.selectbox(
-                "Separador",
-                options=list(SEPARATORS.keys()),
-                index=0,
-                help="Caractere que separa as colunas no CSV"
-            )
-            separator = SEPARATORS[separator_label]
+        # Variáveis para armazenar configurações
+        separator = ","
+        encoding = "utf-8"
+        selected_sheet = None
+        selected_table = None
 
-        with col_enc:
-            encoding_label = st.selectbox(
-                "Encoding",
-                options=list(ENCODINGS.keys()),
-                index=0,
-                help="Codificação do arquivo (use Latin-1 se UTF-8 der erro)"
-            )
-            encoding = ENCODINGS[encoding_label]
+        if is_csv:
+            # Opções de configuração do CSV
+            col_sep, col_enc = st.columns(2)
+
+            with col_sep:
+                separator_label = st.selectbox(
+                    "Separador",
+                    options=list(SEPARATORS.keys()),
+                    index=0,
+                    help="Caractere que separa as colunas no CSV"
+                )
+                separator = SEPARATORS[separator_label]
+
+            with col_enc:
+                encoding_label = st.selectbox(
+                    "Encoding",
+                    options=list(ENCODINGS.keys()),
+                    index=0,
+                    help="Codificação do arquivo (use Latin-1 se UTF-8 der erro)"
+                )
+                encoding = ENCODINGS[encoding_label]
+
+        elif is_excel:
+            # Opções de configuração do Excel
+            try:
+                # Criar DataManager temporário para listar sheets
+                temp_dm = DataManager()
+                sheets = temp_dm.list_sheets_from_excel(uploaded_file)
+                uploaded_file.seek(0)  # Reset file pointer após leitura
+
+                if sheets:
+                    selected_sheet = st.selectbox(
+                        "Planilha (Sheet)",
+                        options=sheets,
+                        index=0,
+                        help="Selecione a planilha do Excel que deseja carregar"
+                    )
+                else:
+                    st.warning("Nenhuma planilha encontrada no arquivo Excel.")
+            except Exception as e:
+                st.error(f"Erro ao listar planilhas: {str(e)}")
+
+        elif is_sqlite:
+            # Opções de configuração do SQLite
+            try:
+                # Criar DataManager temporário para listar tabelas
+                temp_dm = DataManager()
+                tables = temp_dm.list_tables_from_db(uploaded_file)
+                uploaded_file.seek(0)  # Reset file pointer após leitura
+
+                if tables:
+                    selected_table = st.selectbox(
+                        "Tabela",
+                        options=tables,
+                        index=0,
+                        help="Selecione a tabela do banco de dados que deseja carregar"
+                    )
+                else:
+                    st.warning("Nenhuma tabela encontrada no arquivo SQLite.")
+            except Exception as e:
+                st.error(f"Erro ao listar tabelas: {str(e)}")
 
         # Botão para carregar
         load_btn = st.button("📂 Carregar arquivo", type="primary")
@@ -493,21 +548,37 @@ def main():
                 try:
                     with st.spinner("Carregando dados..."):
                         st.session_state.data_manager = DataManager()
-                        st.session_state.raw_df = st.session_state.data_manager.load_csv_to_raw(
-                            uploaded_file,
-                            separator=separator,
-                            encoding=encoding
-                        )
+
+                        if is_csv:
+                            st.session_state.raw_df = st.session_state.data_manager.load_csv_to_raw(
+                                uploaded_file,
+                                separator=separator,
+                                encoding=encoding
+                            )
+                        elif is_excel:
+                            st.session_state.raw_df = st.session_state.data_manager.load_excel_to_raw(
+                                uploaded_file,
+                                sheet_name=selected_sheet if selected_sheet else 0
+                            )
+                        elif is_sqlite:
+                            if not selected_table:
+                                st.error("Selecione uma tabela para carregar.")
+                                st.stop()
+                            st.session_state.raw_df = st.session_state.data_manager.load_db_to_raw(
+                                uploaded_file,
+                                table_name=selected_table
+                            )
+
                         st.session_state.sanitizer = DataSanitizer(st.session_state.data_manager)
                         st.session_state.file_loaded = True
                         st.session_state.analysis_result = None
                         st.session_state.cleaning_result = None
                         st.session_state.clean_df = None
                 except UnicodeDecodeError:
-                    st.error("❌ Erro de encoding. Tente selecionar **Latin-1** ou **Windows-1252**.")
+                    st.error("Erro de encoding. Tente selecionar **Latin-1** ou **Windows-1252**.")
                     st.stop()
                 except Exception as e:
-                    st.error(f"❌ Erro ao carregar arquivo: {str(e)}")
+                    st.error(f"Erro ao carregar arquivo: {str(e)}")
                     st.stop()
 
             # Exibe dados originais

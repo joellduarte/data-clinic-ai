@@ -45,13 +45,14 @@ Executa SQL → Dados limpos prontos para download
 
 ### Funcionalidades
 
+- **Múltiplos formatos**: CSV, Excel (.xlsx, .xls) e SQLite (.db, .sqlite)
 - **Retry Automático**: Se o SQL gerado falhar, o sistema pede correção automática (configurável de 0 a 10 tentativas)
 - **Fallback entre modelos**: Se um modelo der rate limit, tenta outro automaticamente
 - **Padronização inteligente**: Detecta múltiplos formatos na mesma coluna (ex: datas em DD/MM/YYYY e YYYY-MM-DD juntas) e trata cada um
 - **Nunca perde dados**: Usa COALESCE para manter o valor original se não conseguir converter
 - **Configurações pela interface**: API Key e preferências salvas localmente
-- **Suporte a encodings**: UTF-8, Latin-1, Windows-1252
-- **Separadores flexíveis**: Vírgula, ponto-e-vírgula, tab, pipe
+- **Suporte a encodings**: UTF-8, Latin-1, Windows-1252 (para CSV)
+- **Separadores flexíveis**: Vírgula, ponto-e-vírgula, tab, pipe (para CSV)
 
 ---
 

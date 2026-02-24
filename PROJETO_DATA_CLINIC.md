@@ -16,7 +16,8 @@ O **Data Clinic AI** é uma ferramenta de ETL "inteligente" para higienização 
 ## 2. Funcionalidades Implementadas
 
 ### Core
-- ✅ Upload de arquivos CSV com seleção de separador e encoding
+- ✅ Upload de arquivos CSV, Excel (.xlsx, .xls) e SQLite (.db, .sqlite)
+- ✅ Seleção de sheet (Excel) e tabela (SQLite)
 - ✅ Análise automática de schema via LLM
 - ✅ Geração de SQL de limpeza via LLM
 - ✅ Execução do SQL em SQLite in-memory
@@ -135,17 +136,18 @@ O prompt instrui explicitamente a IA a usar apenas funções compatíveis.
 - Reset à meia-noite UTC
 - Adicionar $10 de créditos desbloqueia 1000 req/dia
 
-### Formatos de Arquivo
-- Atualmente apenas CSV
-- Excel (.xlsx) e SQLite (.db) planejados para versões futuras
+### Formatos de Arquivo Suportados
+- ✅ CSV (com seleção de separador e encoding)
+- ✅ Excel (.xlsx, .xls) com seleção de sheet
+- ✅ SQLite (.db, .sqlite) com seleção de tabela
 
 ---
 
 ## 7. Próximas Versões (Roadmap)
 
-### v2.1 - Novos Formatos
-- [ ] Suporte a Excel (.xlsx, .xls)
-- [ ] Suporte a SQLite (.db, .sqlite)
+### v2.1 - Novos Formatos ✅ CONCLUÍDO
+- [x] Suporte a Excel (.xlsx, .xls)
+- [x] Suporte a SQLite (.db, .sqlite)
 - [ ] Detecção automática de encoding
 
 ### v2.2 - Melhorias de UX
